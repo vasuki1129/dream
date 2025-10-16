@@ -1,0 +1,162 @@
+* Overview
+** Key Features
+- Statically Typed
+-
+
+
+
+
+
+
+
+** Design Scratch
+a function is a piece of code enclosed in {}
+statements with a semicolon are processed as expected,
+however other operators are also permitted:
+------Operator--|----Description--------------------------------------------------------------------------------
+- ->            |    return the return value of the statement as part of the result tuple and continue         |
+- -><           |    return the value of the statement as part of result tuple and return                      |
+- !             |    return the value if it is not an error tuple, and hard fault if it is                     |
+- ?("...")      |    return the value if it is not an error tuple, and print given warning to output if it is  |
+- ?("...")<     |    same as last, but returns instead of continuing                                           |
+- <-            |    the value is an input to the function                                                     |
+- >|            |    prints the value to stdout
+
+
+eg:
+
+some_function <=
+{
+        i8::a <-
+        i8::b <-
+        a+b   ->
+};
+
+calling is done with the >> operator on a tuple:
+
+(4, 7) >> some_function
+
+ returns (11)
+
+ functions can be anonymous:
+
+ (3,2) >> {
+     i8::a <-
+     i8::b <-
+
+     a*b   -><
+ } => i8::newvar;
+
+ newvar will now equal 6
+
+functions can also be used directly as values, with optional capturing:
+
+
+i8::somevalue <= 7;
+
+(
+        3,
+        | somevalue | {
+                somevalue * 2 ->
+        }
+) -|
+
+prints:
+
+```
+(3,14)
+```
+
+control flow:
+
+a branch is a function like any other:
+
+if height > 20
+{
+        20 ->
+}
+else
+{
+        height ->
+};
+
+so is a for loop:
+
+for i8::i <= range << (0,4)
+{
+        i ->
+}-|
+
+prints:
+```
+(0,1,2,3,4)
+```
+
+ a struct is a type of "templated" tuple, which is defined as a tuple of type names:
+
+ Person <= (
+        i8::height,
+        i8::weight
+ );
+
+
+Person can now be used as a type definition:
+
+Person::john <= (170,220);
+
+Fields can also be set by name:
+
+Person::john <= (
+        weight: 170,
+        height: 220
+);
+
+john -|
+
+```
+::Person::
+(
+        height: 220,
+        weight: 170,
+)
+```
+
+note that the layout and type of the struct members is all that matters,
+eg:
+
+Person <= (
+        i8::height,
+        i8::weight
+ );
+
+ Cat <= (
+        i8::length,
+        i8::weight,
+ );
+
+Person::john <= (
+        weight: 170,
+        height: 220
+);
+
+
+Cat::whiskers <= john;
+john-|
+whiskers-|
+
+prints:
+
+```
+::Person::
+(
+        height: 220,
+        weight: 170,
+)
+
+::Cat::
+(
+        length: 220,
+        weight: 170,
+)
+
+```

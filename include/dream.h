@@ -79,11 +79,17 @@ public:
 class Shader
 {
 private:
-    unsigned int shaderHandle = 0;
 public:
     Shader(std::string path);
     void bind();
+
+    unsigned int shaderHandle = 0;
 };
+
+
+bool DreamKeyDown(int key);
+bool DreamKeyPressed(int key);
+bool DreamKeyReleased(int key);
 
 void DreamProcessRenderQueue();
 void DreamAddGameObject(GameObject* object);
@@ -102,8 +108,8 @@ void UseOrtho();
 
 unsigned int GrabVbo();
 
-void DreamDrawQuadSolid(int x, int y, int w, int h, glm::vec4 color);
-void DreamDrawQuadTexture(int x, int y, int w, int h, glm::vec4 color, std::string texture);
+void DreamDrawQuadSolid(float x, float y, float w, float h, glm::vec4 color);
+void DreamDrawQuadTexture(float x, float y, float w, float h, glm::vec4 color, std::string texture);
 
 void DrawSprite(int x, int y, std::string sprite);
 void DrawSprite(int x, int y, int w, int h, std::string sprite);

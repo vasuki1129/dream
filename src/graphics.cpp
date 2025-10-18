@@ -1,3 +1,7 @@
+#include <mutex>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
+
 #include "dream.h"
 #include <iostream>
 #include <GL/glew.h>
@@ -6,6 +10,8 @@
 #include <vector>
 #include <fstream>
 #include "stb_image.h"
+#include <glm/gtx/transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 GLFWwindow* window;
 unsigned short screenWidth =800;
 unsigned short screenHeight =600;
@@ -13,18 +19,44 @@ unsigned int vao;
 unsigned int quadVbo;
 
 float delta = 0.0f;
+void GLAPIENTRY
+MessageCallback( GLenum source,
+                 GLenum type,
+                 GLuint id,
+                 GLenum severity,
+                 GLsizei length,
+                 const GLchar* message,
+                 const void* userParam )
+{
+  fprintf( stderr, "GL CALLBACK: %s \n\ttype = 0x%x, \n\tseverity = 0x%x, \n\tmessage = %s\n",
+           ( type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : "" ),
+            type, severity, message );
+}
 
 std::map<std::string, Shader*> shaderCache;
 std::map<std::string, Texture*> textureCache;
 
-float quadVerts[] = {
-    -0.5f,-0.5f,0.25f,        0.0f,0.0f,
-    0.5f,-0.5f,0.25f,         1.0f,0.0f,
-    0.5f,0.5f,0.25f,          1.0f,1.0f,
 
-    -0.5f,0.5f,0.25f,         0.0f,1.0f,
-    -0.5f,-0.5f,0.25f,        0.0f,0.0f,
-    0.5f,0.5f,0.25f,          1.0f,1.0f
+enum class DreamKeyState {
+  UP,
+  PRESSED,
+  DOWN,
+  RELEASED
+};
+
+
+std::map<int, DreamKeyState> inputMap;
+
+
+
+float quadVerts[] = {
+    0.0f,0.0f,-0.25f,        0.0f,0.0f,
+    1.0f,0.0f,-0.25f,         1.0f,0.0f,
+    1.0f,1.0f,-0.25f,          1.0f,1.0f,
+
+    0.0f,1.0f,-0.25f,         0.0f,1.0f,
+    0.0f,0.0f,-0.25f,        0.0f,0.0f,
+    1.0f,1.0f,-0.25f,          1.0f,1.0f
 };
 
 std::vector<DrawCall*> renderQueue;
@@ -42,11 +74,21 @@ Texture::Texture(std::string path)
     unsigned char* data = stbi_load(path.c_str(),&width,&height,&nChannels,0);
     if(data)
     {
-        unsigned int texture;
+        GLuint texture;
         glGenTextures(1,&texture);
+        glActiveTexture(GL_TEXTURE0);
+        glBindVertexArray(vao);
+
         glBindTexture(GL_TEXTURE_2D, texture);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE,data);
+        glActiveTexture(GL_TEXTURE0);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE,data);
         glGenerateMipmap(GL_TEXTURE_2D);
+        this->textureHandle = texture;
         stbi_image_free(data);
     }
     else
@@ -65,6 +107,55 @@ void GameObject::AddChild(GameObject* object)
     children.push_back(object);
 }
 
+bool DreamKeyDown(int key) {
+
+  try {
+    if (inputMap.at(key) == DreamKeyState::DOWN ||
+        inputMap.at(key) == DreamKeyState::PRESSED) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (std::exception e) {
+    return false;
+  }
+}
+
+bool DreamKeyPressed(int key) {
+  try {
+    if (inputMap.at(key) == DreamKeyState::PRESSED) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (std::exception e) {
+    return false;
+  }
+}
+
+bool DreamKeyReleased(int key) {
+  try {
+    if (inputMap.at(key) == DreamKeyState::RELEASED) {
+      return true;
+    } else {
+      return false;
+    }
+  } catch (std::exception e) {
+    return false;
+  }
+}
+
+void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+  if (action == GLFW_PRESS)
+  {
+      inputMap[key] = DreamKeyState::PRESSED;
+  }
+  else if (action == GLFW_RELEASE)
+  {
+      inputMap[key] = DreamKeyState::RELEASED;
+  }
+}
 
 Texture* GetTexture(std::string path)
 {
@@ -162,8 +253,6 @@ Shader::Shader(std::string path)
         glGetShaderInfoLog(fragmentShader,512,NULL,infoLog);
         std::cout << "ERROR: Fragment Shader Compilation Failed\n\tShader:\t" << path << "\n\t"<<infoLog<<"\n";
     }
-
-
     shaderHandle = glCreateProgram();
 
     glAttachShader(shaderHandle,vertexShader);
@@ -202,15 +291,34 @@ void DreamProcessRenderQueue()
 }
 
 
+void ProcessInput()
+{
+  for (std::pair<int,DreamKeyState> key : inputMap)
+  {
+    if (key.second == DreamKeyState::PRESSED)
+    {
+        inputMap[key.first] = DreamKeyState::DOWN;
+    } else if (key.second == DreamKeyState::RELEASED) {
+        inputMap[key.first] = DreamKeyState::UP;
+    }
+  }
+}
+
 void DreamStart()
 {
+
     DreamInit();
+
+    //enable debugging
+    glEnable              ( GL_DEBUG_OUTPUT );
+    glDebugMessageCallback( MessageCallback, 0 );
+
     curInitFunc();
     while(!glfwWindowShouldClose((window)))
     {
         start = glfwGetTime();
         glfwPollEvents();
-
+        ProcessInput();
         curLoopFunc(delta);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         if(sceneRoot != nullptr)
@@ -226,6 +334,11 @@ void DreamStart()
     DreamTerminate();
 }
 
+void window_size_callback(GLFWwindow *window, int width, int height) {
+  screenWidth = width;
+  screenHeight = height;
+  glViewport(0,0,screenWidth,screenHeight);
+}
 
 void DreamInit()
 {
@@ -239,6 +352,8 @@ void DreamInit()
         glfwMakeContextCurrent(window);
         glewInit();
 
+        glfwSetKeyCallback(window, key_callback);
+        glfwSetWindowSizeCallback(window,window_size_callback);
         glGenVertexArrays(1,&vao);
         glBindVertexArray(vao);
 
@@ -260,9 +375,8 @@ void DreamTerminate()
     glfwTerminate();
 }
 
-void UseOrtho()
-{
-    glOrtho(0,screenWidth,screenHeight,0,0.0,100.0f);
+glm::mat4 Ortho() {
+    return glm::ortho(0.0f,(float)screenWidth,(float)screenHeight,0.0f);
 }
 
 QuadDrawCall::QuadDrawCall(glm::vec2 position, glm::vec2 size, std::string texture, glm::vec4 color)
@@ -273,33 +387,42 @@ QuadDrawCall::QuadDrawCall(glm::vec2 position, glm::vec2 size, std::string textu
 }
 
 
+void QuadDrawCall::draw() {
 
-
-void QuadDrawCall::draw()
-{
-    std::cout << "Drawing Quad: \n";
     GetShader("quad")->bind();
+    glm::mat4 transform = glm::mat4(1.0f);
+    transform = glm::scale(transform, glm::vec3(size.x,size.y,1.0f));
+    transform = glm::translate(transform,glm::vec3(position.x, position.y, 0.0f));
+    //transform = glm::scale(glm::vec3(size.x,size.y,1.0f)) * transform;
 
-    std::cout << this->texture;
+
+    glm::mat4 ortho = Ortho();
     if(this->texture != "")
     {
-        Texture* tex = GetTexture("test.png");
-        std::cout << tex->textureHandle;
+        Texture *tex = GetTexture("test.png");
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, tex->textureHandle);
     }
 
+    glUniformMatrix4fv(
+        glGetUniformLocation(GetShader("quad")->shaderHandle, "ortho"), 1,GL_FALSE,glm::value_ptr(ortho));
+    glUniformMatrix4fv(
+        glGetUniformLocation(GetShader("quad")->shaderHandle, "transform"), 1,GL_FALSE,glm::value_ptr(transform));
+    glUniform1i(glGetUniformLocation(GetShader("quad")->shaderHandle,"texture1"),0);
 
+    GetShader("quad")->bind();
+    //glEnable(GL_DEPTH_TEST);
     glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
     glDrawArrays(GL_TRIANGLES,0,6);
 }
 
-void DreamDrawQuadSolid(int x, int y, int w, int h, glm::vec4 color)
+void DreamDrawQuadSolid(float x, float y, float w, float h, glm::vec4 color)
 {
     QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y),glm::vec2(w,h),"",color);
     renderQueue.push_back(call);
 }
 
-void DreamDrawQuadTexture(int x, int y, int w, int h, glm::vec4 color, std::string texture)
+void DreamDrawQuadTexture(float x, float y, float w, float h, glm::vec4 color, std::string texture)
 {
     QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y), glm::vec2(w,h),texture,color);
     renderQueue.push_back(call);

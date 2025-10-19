@@ -1,6 +1,9 @@
-#include <mutex>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
+
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 #include "dream.h"
 #include <iostream>
@@ -12,11 +15,38 @@
 #include "stb_image.h"
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
 GLFWwindow* window;
 unsigned short screenWidth =800;
 unsigned short screenHeight =600;
 unsigned int vao;
 unsigned int quadVbo;
+
+
+unsigned short GetScreenWidth()
+{
+    return screenWidth;
+}
+
+unsigned short GetScreenHeight()
+{
+    return screenHeight;
+}
+void GuiText(std::string text)
+{
+    ImGui::Text(text.c_str());
+}
+
+void BeginWindow(std::string name)
+{
+    ImGui::Begin(name.c_str());
+}
+
+
+void EndWindow()
+{
+    ImGui::End();
+}
 
 float delta = 0.0f;
 void GLAPIENTRY
@@ -44,10 +74,7 @@ enum class DreamKeyState {
   RELEASED
 };
 
-
 std::map<int, DreamKeyState> inputMap;
-
-
 
 float quadVerts[] = {
     0.0f,0.0f,-0.25f,        0.0f,0.0f,
@@ -97,15 +124,13 @@ Texture::Texture(std::string path)
     }
 }
 
-void DreamAddGameObject(GameObject* object)
+GameObject* DreamAddGameObject(GameObject* object)
 {
     sceneRoot->AddChild(object);
+    return object;
+
 }
 
-void GameObject::AddChild(GameObject* object)
-{
-    children.push_back(object);
-}
 
 bool DreamKeyDown(int key) {
 
@@ -316,7 +341,15 @@ void DreamStart()
     curInitFunc();
     while(!glfwWindowShouldClose((window)))
     {
+
+
+
+
         start = glfwGetTime();
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+
         glfwPollEvents();
         ProcessInput();
         curLoopFunc(delta);
@@ -328,6 +361,9 @@ void DreamStart()
         }
         DreamProcessRenderQueue();
 
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         glfwSwapBuffers(window);
         delta = glfwGetTime() - start;
     }
@@ -351,6 +387,21 @@ void DreamInit()
         window = glfwCreateWindow(screenWidth,screenHeight,"Dream - v0.0.2",NULL,NULL);
         glfwMakeContextCurrent(window);
         glewInit();
+        glfwSwapInterval(0);
+
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+
+
+        ImGui::StyleColorsDark();
+
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.ScaleAllSizes(1.0);
+        style.FontScaleDpi = 1.0;
+
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init("#version 330 core");
 
         glfwSetKeyCallback(window, key_callback);
         glfwSetWindowSizeCallback(window,window_size_callback);
@@ -366,7 +417,30 @@ void DreamInit()
         glVertexAttribPointer(1, 2, GL_FLOAT,GL_FALSE,5*sizeof(float),(void*)(3*sizeof(float)));
         glBufferData(GL_ARRAY_BUFFER,sizeof(quadVerts),quadVerts,GL_STATIC_DRAW);
         sceneRoot = new GameObject();
+
+
+        glEnable(GL_BLEND);
     }
+}
+
+SpriteRenderComponent::SpriteRenderComponent(std::string sprite,glm::vec2 size, glm::vec2 offset)
+{
+    this->offset = offset;
+    this->size = size;
+    spriteName = sprite;
+    cachedSprite = GetTexture(sprite);
+}
+SpriteRenderComponent::SpriteRenderComponent(std::string sprite,glm::vec2 size)
+{
+    this->size = size;
+    this->offset = glm::vec2(0,0);
+    spriteName = sprite;
+    cachedSprite = GetTexture(sprite);
+}
+
+void SpriteRenderComponent::render()
+{
+    DreamDrawQuadTexture(this->gameobject->position.x + this->offset.x,this->gameobject->position.y + this->offset.y,this->gameobject->size.x,this->gameobject->size.y,glm::vec4(1.0f,1.0f,1.0f,1.0f),this->spriteName);
 }
 
 void DreamTerminate()
@@ -391,10 +465,8 @@ void QuadDrawCall::draw() {
 
     GetShader("quad")->bind();
     glm::mat4 transform = glm::mat4(1.0f);
-    transform = glm::scale(transform, glm::vec3(size.x,size.y,1.0f));
     transform = glm::translate(transform,glm::vec3(position.x, position.y, 0.0f));
-    //transform = glm::scale(glm::vec3(size.x,size.y,1.0f)) * transform;
-
+    transform = glm::scale(transform, glm::vec3(size.x,size.y,1.0f));
 
     glm::mat4 ortho = Ortho();
     if(this->texture != "")
@@ -411,7 +483,6 @@ void QuadDrawCall::draw() {
     glUniform1i(glGetUniformLocation(GetShader("quad")->shaderHandle,"texture1"),0);
 
     GetShader("quad")->bind();
-    //glEnable(GL_DEPTH_TEST);
     glBindBuffer(GL_ARRAY_BUFFER,quadVbo);
     glDrawArrays(GL_TRIANGLES,0,6);
 }
@@ -431,8 +502,15 @@ void DreamDrawQuadTexture(float x, float y, float w, float h, glm::vec4 color, s
 
 void GameObject::processTick(float delta)
 {
+    for(Component* c : this->components)
+    {
+        c->tick(delta);
+    }
     tick(delta);
     postTick(delta);
+
+
+
 }
 
 void GameObject::postTick(float delta)
@@ -445,6 +523,10 @@ void GameObject::postTick(float delta)
 
 void GameObject::processRender()
 {
+    for(Component* c : this->components)
+    {
+        c->render();
+    }
     render();
     postRender();
 }
@@ -457,11 +539,41 @@ void GameObject::postRender()
     }
 }
 
+GameObject* GameObject::AddComponent(Component* c)
+{
+    this->components.push_back(c);
+    c->gameobject = this;
+    return this;
+}
+
+GameObject* GameObject::AddChild(GameObject* object)
+{
+    children.push_back(object);
+    return object;
+}
+
+
+
+ConstantTravelComponent::ConstantTravelComponent(glm::vec2 direction, float speed)
+{
+    this->direction = glm::normalize(direction);
+    this->speed = speed;
+}
+
+void ConstantTravelComponent::tick(float delta)
+{
+    this->gameobject->position += direction * speed * delta;
+}
+
 void GameObject::start(){}
 void GameObject::tick(float delta){}
 void GameObject::render(){}
 void GameObject::destroy(){}
 
+void Component::start(){}
+void Component::tick(float delta){}
+void Component::render(){}
+void Component::destroy(){}
 //=======OPENGL UTILITIES======================
 unsigned int GrabVbo()
 {

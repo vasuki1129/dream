@@ -37,14 +37,16 @@ public:
 
     void postRender();
     void processRender();
+    GameObject* AddComponent(Component* c);
+    GameObject* AddChild(GameObject* object);
 
-    void AddChild(GameObject* object);
-private:
+    glm::vec2 position = glm::vec2(20.0f,20.0f);
+    glm::vec2 size = glm::vec2(128.0f,128.0f);
+
+protected:
     GameObject* parent;
     std::vector<GameObject*> children;
     std::vector<Component*> components;
-
-
 };
 
 class Component : public Callbackable
@@ -55,6 +57,7 @@ public:
     virtual void tick(float delta) override;
     virtual void render() override;
     virtual void destroy() override;
+    GameObject* gameobject;
 };
 
 class DrawCall
@@ -64,6 +67,32 @@ public:
     virtual ~DrawCall();
 
 };
+
+class SpriteRenderComponent : public Component
+{
+private:
+    glm::vec2 offset;
+    glm::vec2 size;
+    Texture* cachedSprite;
+public:
+    virtual void render() override;
+
+    std::string spriteName;
+
+    SpriteRenderComponent(std::string sprite,glm::vec2 size,glm::vec2 offset);
+    SpriteRenderComponent(std::string sprite, glm::vec2 offset);
+};
+
+class ConstantTravelComponent : public Component
+{
+  private:
+    glm::vec2 direction;
+    float speed;
+  public:
+    ConstantTravelComponent(glm::vec2 direction, float speed);
+    virtual void tick(float delta) override;
+};
+
 
 class QuadDrawCall : public DrawCall
 {
@@ -86,13 +115,22 @@ public:
     unsigned int shaderHandle = 0;
 };
 
+void BeginWindow(std::string name);
+void EndWindow();
+void GuiText(std::string text);
+
+
+
+
+unsigned short GetScreenWidth();
+unsigned short GetScreenHeight();
 
 bool DreamKeyDown(int key);
 bool DreamKeyPressed(int key);
 bool DreamKeyReleased(int key);
 
 void DreamProcessRenderQueue();
-void DreamAddGameObject(GameObject* object);
+GameObject* DreamAddGameObject(GameObject* object);
 
 
 Shader* GetShader(std::string path);

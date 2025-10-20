@@ -1,3 +1,4 @@
+#include <glm/ext/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 
@@ -21,6 +22,18 @@ unsigned short screenWidth =800;
 unsigned short screenHeight =600;
 unsigned int vao;
 unsigned int quadVbo;
+
+
+
+void PhysicsMomentumComponent::tick(float delta)
+{
+    this->gameobject->position += this->momentum * delta;
+}
+
+void PhysicsMomentumComponent::ApplyForce(glm::vec2 force, float delta)
+{
+    momentum += force * delta;
+}
 
 
 unsigned short GetScreenWidth()
@@ -77,13 +90,13 @@ enum class DreamKeyState {
 std::map<int, DreamKeyState> inputMap;
 
 float quadVerts[] = {
-    0.0f,0.0f,-0.25f,        0.0f,0.0f,
-    1.0f,0.0f,-0.25f,         1.0f,0.0f,
-    1.0f,1.0f,-0.25f,          1.0f,1.0f,
+    -0.5f,-0.5f,-0.25f,        0.0f,0.0f,
+    0.5f,-0.5f,-0.25f,         1.0f,0.0f,
+    0.5f,0.5f,-0.25f,          1.0f,1.0f,
 
-    0.0f,1.0f,-0.25f,         0.0f,1.0f,
-    0.0f,0.0f,-0.25f,        0.0f,0.0f,
-    1.0f,1.0f,-0.25f,          1.0f,1.0f
+    -0.5f,0.5f,-0.25f,         0.0f,1.0f,
+    -0.5f,-0.5f,-0.25f,        0.0f,0.0f,
+    0.5f,0.5f,-0.25f,          1.0f,1.0f
 };
 
 std::vector<DrawCall*> renderQueue;
@@ -329,11 +342,21 @@ void ProcessInput()
   }
 }
 
+
+void InputBindComponent::tick(float delta) {
+  if (DreamKeyDown(this->key)) {
+      inputBinding(delta,this);
+  }
+}
+
+InputBindComponent::InputBindComponent(int key, void (*binding)(float,Component*)) {
+  inputBinding = binding;
+  this->key = key;
+}
+
 void DreamStart()
 {
-
     DreamInit();
-
     //enable debugging
     glEnable              ( GL_DEBUG_OUTPUT );
     glDebugMessageCallback( MessageCallback, 0 );
@@ -341,10 +364,6 @@ void DreamStart()
     curInitFunc();
     while(!glfwWindowShouldClose((window)))
     {
-
-
-
-
         start = glfwGetTime();
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -440,7 +459,7 @@ SpriteRenderComponent::SpriteRenderComponent(std::string sprite,glm::vec2 size)
 
 void SpriteRenderComponent::render()
 {
-    DreamDrawQuadTexture(this->gameobject->position.x + this->offset.x,this->gameobject->position.y + this->offset.y,this->gameobject->size.x,this->gameobject->size.y,glm::vec4(1.0f,1.0f,1.0f,1.0f),this->spriteName);
+    DreamDrawQuadTexture(this->gameobject->position.x + this->offset.x,this->gameobject->position.y + this->offset.y,this->gameobject->size.x,this->gameobject->size.y,this->gameobject->rotation,glm::vec4(1.0f,1.0f,1.0f,1.0f),this->spriteName);
 }
 
 void DreamTerminate()
@@ -453,8 +472,9 @@ glm::mat4 Ortho() {
     return glm::ortho(0.0f,(float)screenWidth,(float)screenHeight,0.0f);
 }
 
-QuadDrawCall::QuadDrawCall(glm::vec2 position, glm::vec2 size, std::string texture, glm::vec4 color)
-{
+QuadDrawCall::QuadDrawCall(glm::vec2 position, glm::vec2 size, float rotation,
+                           std::string texture, glm::vec4 color) {
+    this->rotation = rotation;
     this->position = position;
     this->size = size;
     this->texture = texture;
@@ -465,9 +485,11 @@ void QuadDrawCall::draw() {
 
     GetShader("quad")->bind();
     glm::mat4 transform = glm::mat4(1.0f);
-    transform = glm::translate(transform,glm::vec3(position.x, position.y, 0.0f));
-    transform = glm::scale(transform, glm::vec3(size.x,size.y,1.0f));
 
+    transform = glm::translate(transform,glm::vec3(position.x, position.y, 0.0f));
+
+    transform = glm::rotate(transform, this->rotation,glm::vec3(0,0,1));
+    transform = glm::scale(transform, glm::vec3(size.x,size.y,1.0f));
     glm::mat4 ortho = Ortho();
     if(this->texture != "")
     {
@@ -487,15 +509,15 @@ void QuadDrawCall::draw() {
     glDrawArrays(GL_TRIANGLES,0,6);
 }
 
-void DreamDrawQuadSolid(float x, float y, float w, float h, glm::vec4 color)
+void DreamDrawQuadSolid(float x, float y, float w, float h,float rotation, glm::vec4 color)
 {
-    QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y),glm::vec2(w,h),"",color);
+    QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y),glm::vec2(w,h),rotation,"",color);
     renderQueue.push_back(call);
 }
 
-void DreamDrawQuadTexture(float x, float y, float w, float h, glm::vec4 color, std::string texture)
+void DreamDrawQuadTexture(float x, float y, float w, float h,float rotation, glm::vec4 color, std::string texture)
 {
-    QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y), glm::vec2(w,h),texture,color);
+    QuadDrawCall* call = new QuadDrawCall(glm::vec2(x,y), glm::vec2(w,h),rotation,texture,color);
     renderQueue.push_back(call);
 }
 

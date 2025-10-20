@@ -32,6 +32,17 @@ public:
     virtual void render() override;
     virtual void destroy() override;
 
+    template <typename T> T *GetComponent() {
+      for (Component *c : this->components) {
+        T* item = dynamic_cast<T*>(c);
+        if (item != nullptr) {
+            return item;
+        }
+      }
+      return nullptr;
+    }
+
+
     void postTick(float delta);
     void processTick(float delta);
 
@@ -42,7 +53,7 @@ public:
 
     glm::vec2 position = glm::vec2(20.0f,20.0f);
     glm::vec2 size = glm::vec2(128.0f,128.0f);
-
+    float rotation = 0.0f;
 protected:
     GameObject* parent;
     std::vector<GameObject*> children;
@@ -66,6 +77,27 @@ public:
     virtual void draw() =0;
     virtual ~DrawCall();
 
+};
+
+class InputBindComponent : public Component {
+private:
+    int key;
+    void(*inputBinding)(float,Component*);
+
+public:
+  InputBindComponent(int key, void (*binding)(float,Component*));
+    virtual void tick(float delta) override;
+};
+
+
+class PhysicsMomentumComponent : public Component
+{
+private:
+  glm::vec2 momentum;
+
+public:
+  virtual void tick(float delta) override;
+  void ApplyForce(glm::vec2 force, float delta);
 };
 
 class SpriteRenderComponent : public Component
@@ -98,10 +130,11 @@ class QuadDrawCall : public DrawCall
 {
     glm::vec2 position;
     glm::vec2 size;
+    float rotation;
     std::string texture = "";
 
 public:
-    QuadDrawCall(glm::vec2 position, glm::vec2 size, std::string texture, glm::vec4 color);
+    QuadDrawCall(glm::vec2 position, glm::vec2 size,float rotation, std::string texture, glm::vec4 color);
     virtual void draw() override;
 };
 
@@ -146,8 +179,8 @@ void UseOrtho();
 
 unsigned int GrabVbo();
 
-void DreamDrawQuadSolid(float x, float y, float w, float h, glm::vec4 color);
-void DreamDrawQuadTexture(float x, float y, float w, float h, glm::vec4 color, std::string texture);
+void DreamDrawQuadSolid(float x, float y, float w, float h,float rotation, glm::vec4 color);
+void DreamDrawQuadTexture(float x, float y, float w, float h,float rotation, glm::vec4 color, std::string texture);
 
 void DrawSprite(int x, int y, std::string sprite);
 void DrawSprite(int x, int y, int w, int h, std::string sprite);
